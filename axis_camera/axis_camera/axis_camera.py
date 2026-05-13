@@ -456,6 +456,16 @@ class Axis(Node):
         else:
             self.ptz = None
 
+        
+        self.session = requests.Session()
+        self.session.auth = self.http_auth
+        self.session.headers.update(self.http_headers)
+        self.session.headers.update({
+            "Connection": "keep-alive"
+        })
+
+        #self.http_lock = threading.Lock()
+
     def __str__(self):
         """
         Return string representation.
@@ -529,8 +539,8 @@ class Axis(Node):
             f'{urllib.parse.urlencode(queryParams)}'
         )
         try:
-            resp = requests.get(
-                url, auth=self.http_auth, timeout=self.http_timeout, headers=self.http_headers
+            resp = self.session.get(
+                url, headers=self.http_headers
             )
 
             if self.is_success(resp):
@@ -580,7 +590,7 @@ class Axis(Node):
 
         except Exception as e:
             self.get_logger().warning(
-                f'Exception: {e} when querying {url}/axis-cgi/com/ptz.cgi?{urllib.parse.urlencode(queryParams)}'  # noqa: E501
+                f'Exception: {e} when querying {url}'  # noqa: E501
             )
             new_camera_position = None
 
@@ -589,8 +599,8 @@ class Axis(Node):
     def handle_set_iris(self, req, resp):
         get_url = f'http://{self.hostname}:{self.http_port}/axis-cgi/com/ptz.cgi?iris={req.data}'
         try:
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             resp.success = self.is_success(http_resp)
@@ -603,8 +613,8 @@ class Axis(Node):
     def handle_set_focus(self, req, resp):
         get_url = f'http://{self.hostname}:{self.http_port}/axis-cgi/com/ptz.cgi?focus={req.data}'
         try:
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             resp.success = self.is_success(http_resp)
@@ -620,8 +630,8 @@ class Axis(Node):
             f'/axis-cgi/com/ptz.cgi?brightness={req.data}'
         )
         try:
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             resp.success = self.is_success(http_resp)
@@ -636,8 +646,8 @@ class Axis(Node):
             f'http://{self.hostname}:{self.http_port}/axis-cgi/com/ptz.cgi?autofocus={"on" if req.data else "off"}'  # noqa: E501
         )
         try:
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             resp.success = self.is_success(http_resp)
@@ -652,8 +662,8 @@ class Axis(Node):
             f'http://{self.hostname}:{self.http_port}/axis-cgi/com/ptz.cgi?autoiris={"on" if req.data else "off"}'  # noqa: E501
         )
         try:
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             resp.success = self.is_success(http_resp)
@@ -689,11 +699,9 @@ class Axis(Node):
                     '{"apiVersion": "1.0", "method": "disableLight", '
                     '"params": {"lightID": "led0"}}'
                 )
-            http_resp = requests.post(
+            http_resp = self.session.post(
                 f'http://{self.hostname}:{self.http_port}/axis-cgi/lightcontrol.cgi',
                 post_data,
-                auth=self.http_auth,
-                headers=self.http_headers,
                 timeout=self.http_timeout,
             )
 
@@ -764,8 +772,8 @@ class Axis(Node):
                     f'ImageSource.I0.DayNight.IrCutFilter=no&timestamp={int(time.time())}'
                 )
 
-        return requests.get(
-            get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+        return self.session.get(
+            get_url, timeout=self.http_timeout
         )
 
     def handle_toggle_wiper(self, req, resp):
@@ -799,11 +807,9 @@ class Axis(Node):
                 resp.success = False
                 return resp
 
-            http_resp = requests.post(
+            http_resp = self.session.post(
                 f'http://{self.hostname}:{self.http_port}/axis-cgi/clearviewcontrol.cgi',
                 post_data,
-                auth=self.http_auth,
-                headers=self.http_headers,
                 timeout=self.http_timeout,
             )
 
@@ -854,8 +860,8 @@ class Axis(Node):
                     f'ImageSource.I0.Sensor.Defog=off&timestamp={int(time.time())}'
                 )
 
-            http_resp = requests.get(
-                get_url, auth=self.http_auth, headers=self.http_headers, timeout=self.http_timeout
+            http_resp = self.session.get(
+                get_url, timeout=self.http_timeout
             )
 
             if not self.is_success(http_resp):

@@ -35,6 +35,7 @@
 from math import degrees as rad2deg
 from math import nan as NaN
 from math import radians as deg2rad
+from math import isnan, isinf
 import threading
 import time
 
@@ -166,11 +167,18 @@ class AxisPtz:
         self.joint_state_thread = threading.Thread(target=self.publish_joint_states)
         self.joint_state_thread.start()
 
+        self.session = requests.Session()
+        self.session.auth = self.axis.http_auth
+        self.session.headers.update(self.axis.http_headers)
+        self.session.headers.update({
+            "Connection": "keep-alive"
+        })
+
         # center the camera on startup
         self.send_position(0, 0, 1)
 
     def publish_joint_states(self):
-        rate = self.axis.create_rate(1)
+        rate = self.axis.create_rate(4)
 
         joints = JointState()
         joints.name = [
@@ -203,10 +211,12 @@ class AxisPtz:
                 values from the camera
         """
         d = self.axis.queryCameraPosition()
+        if not d:
+            return (float('nan'), float('nan'), float('nan'))
 
         pan = deg2rad(d['pan']) if 'pan' in d else NaN
         tilt = deg2rad(d['tilt']) if 'tilt' in d else NaN
-        zoom = rescale(d['zoom'], 1, 9999, self.min_zoom, self.max_zoom) if 'zoom' in d else NaN
+        zoom = rescale(d['zoom'], 1, 9999, self.min_zoom, self.max_zoom) if 'zoom' in d else Nan
 
         return (pan, tilt, zoom)
 
@@ -226,10 +236,8 @@ class AxisPtz:
             f'&zoom={int(cmd_zoom)}'
         )
         url = f'http://{self.axis.hostname}:{self.axis.http_port}/{cmd_string}'
-        resp = requests.get(
+        resp = self.session.get(
             url,
-            auth=self.axis.http_auth,
-            timeout=self.axis.http_timeout,
             headers=self.axis.http_headers
         )
         if not self.axis.is_success(resp):
@@ -306,17 +314,28 @@ class AxisPtz:
 
         @return True if the command was sent successfully
         """
+
+        if any(isnan(v) or isinf(v) for v in [cmd_pan, cmd_tilt, cmd_zoom]):
+            self.axis.get_logger().warn("Received NaN/inf in velocity command, ignoring")
+            return
+
         cmd_string = (
             f'/axis-cgi/com/ptz.cgi?continuouspantiltmove={int(cmd_pan)},'
             f'{int(cmd_tilt)}&continuouszoommove={int(cmd_zoom)}'
         )
         url = f'http://{self.axis.hostname}:{self.axis.http_port}/{cmd_string}'
-        resp = requests.get(
+        '''
+        resp = self.session.get(
             url,
-            auth=self.axis.http_auth,
-            timeout=self.axis.http_timeout,
             headers=self.axis.http_headers
         )
+        '''
+        try:
+            resp = self.session.get(url, headers=self.axis.http_headers)
+        except Exception as e:
+            self.axis.get_logger().warn(f'Connection error sending velocity command: {e}')
+            return False
+
 
         if not self.axis.is_success(resp):
             # Error commanding the camera; abort the action
